@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>フォトフレームカメラ（縦長固定）</title>
+    <style>
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; background-color: #001e43; color: #fff; font-family: sans-serif; overflow-x: hidden; }
+        .camera-container { position: relative; width: 100%; max-width: 400px; aspect-ratio: 9/16; overflow: hidden; background: #222; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        .frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; object-fit: contain; }
+        .btn { margin-top: 15px; padding: 12px 24px; background-color: #ff3366; color: white; border: none; border-radius: 25px; font-size: 16px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-secondary { background-color: #666; margin-top: 10px; }
+        #canvas { display: none; }
+        .popup { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        .popup p { font-size: 18px; margin-bottom: 20px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+    <div class="camera-container">
+        <video id="video" autoplay playsinline></video>
+        <img class="frame" src="frame1.png" id="frameImg" alt="Frame">
+    </div>
+
+    <button class="btn" id="captureBtn">写真を撮影する</button>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="popup" class="popup">
+        <p id="popupText">🎉 撮影が完了しました！<br>公式Instagramをフォローして<br>写真を保存しよう！</p>
+        
+        <a href="https://www.instagram.com/shonandai_tanabata?igsh=MXhhcmphbDZtcjZtMA%3D%3D&utm_source=qr" target="_blank" class="btn" id="followBtn">Instagramをフォローする</a>
+        
+        <button class="btn btn-secondary" id="skipBtn">Instagramをフォローしない</button>
+        
+        <div id="downloadArea" style="display:none; margin-top: 20px;">
+            <p>👇 下の画像を表示・長押しして保存してください</p>
+            <img id="resultImage" style="width: 100%; max-width: 300px; border: 2px solid #fff;">
+        </div>
+
+        <button class="btn btn-secondary" id="backBtn">もう一度撮影する（戻る）</button>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('captureBtn');
+        const frameImg = document.getElementById('frameImg');
+        const popup = document.getElementById('popup');
+        const popupText = document.getElementById('popupText');
+        const followBtn = document.getElementById('followBtn');
+        const skipBtn = document.getElementById('skipBtn');
+        const downloadArea = document.getElementById('downloadArea');
+        const resultImage = document.getElementById('resultImage');
+        const backBtn = document.getElementById('backBtn');
+
+        // 画像のセキュリティ設定を解除（もし前回の修正で消していればそのまま消しておいてください）
+        // frameImg.crossOrigin = "anonymous";
+        frameImg.src = "frame1.png"; 
+
+        // 💡 改善：カメラに縦長の解像度（1920x1080）を要求する設定に変更
+        // それでも横長でしか取得できない場合に備え、下でCanvas処理も行います。
+        const constraints = {
+            video: {
+                facingMode: "environment",
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            },
+            audio: false
+        };
+
+        navigator.mediaDevices.getUserMedia(constraints)
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => { alert("カメラの起動に失敗しました。ブラウザの設定でカメラを許可してください。"); });
+
+        // シャッターボタンの処理
+        captureBtn.addEventListener('click', () => {
+            const ctx = canvas.getContext('2d');
+            
+            // 💡 改善：保存画像のサイズを、フレームに合わせて1080x1920（縦長）に完全固定
+            const fixedWidth = 1080;
+            const fixedHeight = 1920;
+            canvas.width = fixedWidth;
+            canvas.height = fixedHeight;
+
+            // カメラの実際の映像解像度を取得
+            const videoWidth = video.videoWidth;
+            const videoHeight = video.videoHeight;
+            
+            // 💡 改善：横長で取得された映像を、縦長のCanvasに合わせて切り抜き・回転させて描画する
+            // 9:16（縦長）の比率で映像の中央を切り抜く計算
+            const sourceWidth = videoWidth;
+            const sourceHeight = (videoWidth * 16) / 9; // 16:9を9:16に
+            const sourceY = (videoHeight - sourceHeight) / 2;
+            
+            // カメラ映像の描画（縦長のCanvasに合わせて自動でフィット）
+            ctx.drawImage(video, 0, sourceY, sourceWidth, sourceHeight, 0, 0, fixedWidth, fixedHeight);
+
+            // フレーム画像を重ねて描画（Canvasサイズが1080x1920なので、そのまま重ねる）
+            try {
+                ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+                // 保存時の画質を最高（1.0）に指定
+                resultImage.src = canvas.toDataURL('image/jpeg', 1.0);
+                popup.style.display = 'flex';
+            } catch (e) {
+                alert("画像の読み込みに失敗しました。ファイル名やセキュリティ設定を確認してください。");
+                console.error(e);
+            }
+        });
+
+        // Instagramボタンの処理
+        followBtn.addEventListener('click', () => {
+            setTimeout(() => {
+                popupText.style.display = 'none';
+                followBtn.style.display = 'none';
+                skipBtn.style.display = 'none';
+                downloadArea.style.display = 'block';
+            }, 2000);
+        });
+
+        // 「フォローしない」ボタンの処理
+        skipBtn.addEventListener('click', () => {
+            popupText.style.display = 'none';
+            followBtn.style.display = 'none';
+            skipBtn.style.display = 'none';
+            downloadArea.style.display = 'block';
+        });
+
+        // 「戻る」ボタンの処理
+        backBtn.addEventListener('click', () => {
+            popup.style.display = 'none';
+            downloadArea.style.display = 'none';
+            popupText.style.display = 'block';
+            followBtn.style.display = 'inline-block';
+            skipBtn.style.display = 'inline-block';
+            resultImage.src = "";
+        });
+    </script>
+</body>
+</html>
